@@ -17,6 +17,7 @@ contract Sbitwise {
     // events
     event AdminSet(address indexed oldAdmin, address indexed newAdmin);
     event newSplit(string indexed name, string exchangeType, int indexed amount);
+    event memberRemoved(address indexed memberAddress, string indexed name);
     
     // modifier to check if caller is admin
     modifier isAdmin() {
@@ -87,9 +88,16 @@ contract Sbitwise {
         memberAddresses.push( _groupMember);
     }
 
-    //Admin removes member from the group
-    function removeFromGroup(address _groupMember) external isAdmin {
-        //TBD
+    //Admin removes member from the group -- this leaves the array unordered (which shouldn't matter, as array was unordered to begin with)
+    function removeFromGroup(address _groupMember) public isAdmin {
+        for(uint i = 0; i < memberAddresses.length; i++){
+            if(memberAddresses[i] == _groupMember){
+                memberAddresses[i] = memberAddresses[memberAddresses.length - 1];
+                memberAddresses.pop();
+                emit memberRemoved(_groupMember, groupMembers[_groupMember].name);
+                break;
+            }
+        }
     }
 
     //A user claims that they have paid this much. The split is updated. Everyone's confirmed split parameters are set to false. 
@@ -145,9 +153,10 @@ contract Sbitwise {
     }
 
     //If everyone agrees to split and everyone who owes has paid, funds are sent to those who are owed. 
+    //Just trust that this works for now as this is untested on a testnet hahahha
     function settleUp() external everyoneAgreesToSplit allPaid{
         address payable payableAddr;
-        for(uint i = 0; i < memberAddresses.length; i++ ){
+        for(uint i = 0; i < memberAddresses.length; i++){
             if(groupMembers[memberAddresses[i]].owes < 0){
                 payableAddr = payable(memberAddresses[i]);
                 payableAddr.transfer(uint(abs(groupMembers[memberAddresses[i]].owes))); //Transfer what they are owed to their account.
