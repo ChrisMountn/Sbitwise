@@ -9,5 +9,4 @@ I do not intend to put this idea into production, but it was good practice for w
 
 The solidity contract can be found in Sbitwise/Truffle_Project_2_Sbitwise/contracts/Sbitwise.sol.
 
-
 The JavaScript unit tests can be found in Sbitwise/Truffle_Project_2_Sbitwise/test/sbitwise_test.js.
