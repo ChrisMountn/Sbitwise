@@ -14,6 +14,9 @@ contract Sbitwise {
     //the person who initiates the contract is the group admin
     address public groupAdmin;
 
+    //For implementation of pull payments pattern
+    mapping(address => uint) public pendingRefunds;
+
     // events
     event AdminSet(address indexed oldAdmin, address indexed newAdmin);
     event newSplit(string indexed name, string exchangeType, int indexed amount);
@@ -35,6 +38,17 @@ contract Sbitwise {
         }
         require(isMember == true, "Caller is not a group member");
         _;
+    }
+
+    // acts like modifier, but can input other's address in function call
+    function isNotGroupMember(address memberAddress) private view {
+        bool isMember = false;
+        for(uint i = 0; i < memberAddresses.length; i++ ){
+            if(memberAddress == memberAddresses[i]){
+                isMember = true;
+            }
+        }
+        require(isMember == false, "Caller is already a group member");
     }
 
     //modifier to check if everyone agrees to split
@@ -80,8 +94,8 @@ contract Sbitwise {
     }
 
     //Admin adds members to group.
-    //SHOULD CHECK THAT USER NOT ALREADY IN GROUP
     function addToGroup(address _groupMember, string memory _name) external isAdmin {
+        isNotGroupMember(_groupMember); //revert if already a group member
         groupMembers[_groupMember].name = _name;
         groupMembers[_groupMember].amountPaid = 0;
         groupMembers[_groupMember].confirmedSplit = false;
@@ -155,11 +169,9 @@ contract Sbitwise {
     //If everyone agrees to split and everyone who owes has paid, funds are sent to those who are owed. 
     //Just trust that this works for now as this is untested on a testnet hahahha
     function settleUp() external everyoneAgreesToSplit allPaid{
-        address payable payableAddr;
         for(uint i = 0; i < memberAddresses.length; i++){
             if(groupMembers[memberAddresses[i]].owes < 0){
-                payableAddr = payable(memberAddresses[i]);
-                payableAddr.transfer(uint(abs(groupMembers[memberAddresses[i]].owes))); //Transfer what they are owed to their account.
+                pendingRefunds[memberAddresses[i]] += uint(abs(groupMembers[memberAddresses[i]].owes)); //Transfer what they are owed to their account.
             }
         }
         //reset all balances to 0
@@ -174,14 +186,23 @@ contract Sbitwise {
     //Return all funds that have been paid to original recipients (used after money is put in but before settle up).
     function sendAllMoneyBack() external isAdmin{
         for(uint i = 0; i < memberAddresses.length; i++ ){
-            address payable payableAddr;
             if(balances[memberAddresses[i]] > 0){
-                payableAddr = payable(memberAddresses[i]);
-                payableAddr.transfer(uint(balances[memberAddresses[i]]));
+                pendingRefunds[memberAddresses[i]] += uint(balances[memberAddresses[i]]);
                 balances[memberAddresses[i]] = 0;
             }
             groupMembers[memberAddresses[i]].confirmedSplit = false;
         }
+    }
+
+    function withdrawFunds() public {
+        address payee = msg.sender;
+        uint payment = pendingRefunds[payee];
+        
+        require(payment > 0);
+        require(address(this).balance >= payment);
+
+        pendingRefunds[payee] = 0;
+        payable(payee).transfer(payment);
     }
 
     //Changes the admin
